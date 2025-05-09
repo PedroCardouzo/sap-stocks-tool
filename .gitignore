@@ -1,0 +1,6 @@
+*.pdf
+*.xlsx
+*.csv
+__pycache__/
+.DS_Store
+.sap-stock-tool-accepted_terms
