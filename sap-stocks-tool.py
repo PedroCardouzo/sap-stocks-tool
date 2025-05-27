@@ -227,7 +227,7 @@ def extract_sell_data_from_spreadsheet(file_path, year):
 
     # Filter rows where Order type is "Sell at market price" or "Sell with price limit" and Status is "Executed"
     filtered_df = df[
-        df["Order type"].astype(str).isin(["Sell at market price", "Sell with price limit", "Sell-to-cover"]) &
+        df["Order type"].astype(str).isin(["Sell at market price", "Sell with price limit", "Sell-to-cover", "Sell"]) &
         (df["Status"] == "Executed") &
         (df["Date"].apply(is_fiscal_year_entry))
     ]
