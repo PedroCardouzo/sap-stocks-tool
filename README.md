@@ -20,7 +20,7 @@ Use at your own discretion and risk.
 
 ## Setup
 
-`pip install pandas requests tabula-py openpyxl numpy`
+`pip install pandas requests tabula-py openpyxl numpy PyMuPDF`
 A relatively new python 3 version to ensure compatibility, although some care has been taken to ensure compatibility with older versions, I run it on 3.9.
 
 ## Usage

@@ -280,7 +280,8 @@ def extract_sell_data_from_spreadsheet(file_path, year):
     filtered_df = df[
         df["Order type"].astype(str).isin(["Sell at market price", "Sell with price limit", "Sell-to-cover", "Sell"]) &
         (df["Status"] == "Executed") &
-        (df["Date"].apply(is_fiscal_year_entry))
+        (df["Date"].apply(is_fiscal_year_entry)) &
+        (df["Product type"] == "shares")
     ]
 
     filtered_df[SHEET_KEY_DATE_WHEN_SOLD] = filtered_df[SHEET_KEY_DATE_WHEN_SOLD].dt.strftime('%Y-%m-%d')
