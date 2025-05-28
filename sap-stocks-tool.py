@@ -9,9 +9,10 @@ import requests
 import sys
 import tabula
 import warnings
+import fitz
 
 from collections import namedtuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 TERMS_FILE = Path(__file__).parent / '.sap-stock-tool-accepted_terms'
@@ -173,14 +174,40 @@ def get_price_for_buying_eur_at_date(year, month, day):
 def get_price_for_selling_eur_at_date(year, month, day):
     return float(_get_eur_quotation_data_for_date(year, month, day)[VALUE_JSON_KEY][0][COTACAO_VENDA_JSON_KEY])
 
+def yesterday_str(date_tuple):
+    year_s, month_s, day_s = date_tuple
+    # build a datetime object (time portion is ignored)
+    dt = datetime(int(year_s), int(month_s), int(day_s))
+    # subtract one day
+    prev = dt - timedelta(days=1)
+    # format back to strings
+    return (
+        f"{prev.year:04d}",
+        f"{prev.month:02d}",
+        f"{prev.day:02d}"
+    )
+
 def _get_eur_quotation_data_for_date(year, month, day):
     date = f'{month}-{day}-{year}' # for some stupid reason it uses 'murica weird date format..
 
     result = BCB_CACHE_FOR_EUR_REQUESTS.get(date, None)  # default = None
 
+    done = False
+
     if result is None:
-        result = requests.get(f"https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoMoedaPeriodoFechamento(codigoMoeda=@codigoMoeda,dataInicialCotacao=@dataInicialCotacao,dataFinalCotacao=@dataFinalCotacao)?@codigoMoeda='EUR'&@dataInicialCotacao='{date}'&@dataFinalCotacao='{date}'&$format=json").json()
-        BCB_CACHE_FOR_EUR_REQUESTS[date] = result
+        while not done:
+            print("Trying ", date, "...")
+            result = requests.get(f"https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoMoedaPeriodoFechamento(codigoMoeda=@codigoMoeda,dataInicialCotacao=@dataInicialCotacao,dataFinalCotacao=@dataFinalCotacao)?@codigoMoeda='EUR'&@dataInicialCotacao='{date}'&@dataFinalCotacao='{date}'&$format=json").json()
+            if len(result['value']) == 0:
+                year, month, day = yesterday_str((year, month, day))
+                new_date = f'{month}-{day}-{year}' # for some stupid reason it uses 'murica weird date format..
+                print("Day is not valid (weekend or holiday); changed from ", date, " to ", new_date)
+                date = new_date
+            else:
+                done = True
+            
+            print(result)
+            BCB_CACHE_FOR_EUR_REQUESTS[date] = result
 
     return result
 
@@ -191,10 +218,34 @@ def extract_data(fiscal_year, buy_data_path, sell_data_path, output_path):
     unprocessed_transactional_data = merge_transactional_data(buy_data, sell_data)
     save_stock_entries_to_excel(unprocessed_transactional_data, output_path)
 
+def extract_until_text(pdf_path, search_text):
+    # Step 1: Search for the text in raw PDF content
+    doc = fitz.open(pdf_path)
+    target_page = None
+
+    for page_num in range(len(doc)):
+        text = doc[page_num].get_text().lower()
+        if search_text.lower() in text:
+            target_page = page_num + 1 # Pages are 1-based
+            break
+
+    doc.close()
+
+    # Step 2: If found, extract tables only up to that page
+    if target_page is not None:
+        print(f"Stopping at page {target_page}")
+        dfs = tabula.read_pdf(pdf_path, pages=f"1-{target_page - 1}")
+    else:
+        print(f"Extracting all pages.")
+        dfs = tabula.read_pdf(pdf_path, pages='all')
+
+    return dfs
+
 def extract_buy_data_from_pdf(path, fiscal_year):
     pattern = rf'\d{{1,2}} [A-Z][a-z]{{2}} {fiscal_year}'
     is_fiscal_year_entry = lambda x: type(x) is str and re.fullmatch(pattern, x) is not None
-    dfs=tabula.read_pdf(path, pages="all")
+
+    dfs = extract_until_text(path, "Portfolio 2 - Positions - Restricted shares")
 
     for df in dfs:
         df.columns = df.iloc[0] # set the headers with something that actually makes sense
